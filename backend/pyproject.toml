@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "fullstack-poker-backend"
+version = "0.1.0"
+description = "Validation and persistence API for completed poker hands"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+asyncpg = "0.30.0"
+fastapi = "0.116.1"
+pokerkit = "0.7.4"
+pydantic = "2.11.7"
+uvicorn = { version = "0.35.0", extras = ["standard"] }
+
+[tool.poetry.group.dev.dependencies]
+httpx = "0.28.1"
+pytest = "8.4.1"
+pytest-asyncio = "1.1.0"
+ruff = "0.12.7"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
