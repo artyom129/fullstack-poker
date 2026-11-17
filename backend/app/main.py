@@ -9,6 +9,7 @@ import asyncpg
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.domain import Hand
 from app.hand_service import HandValidationError, validate_and_settle
@@ -109,6 +110,28 @@ async def request_validation_error(
     )
 
 
+HTTP_ERROR_CODES = {
+    404: "not_found",
+    405: "method_not_allowed",
+    409: "hand_exists",
+    503: "database_unavailable",
+}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": HTTP_ERROR_CODES.get(exc.status_code, "http_error"),
+                "message": str(exc.detail),
+            }
+        },
+        headers=getattr(exc, "headers", None),
+    )
+
+
 @app.exception_handler(Exception)
 async def unhandled_error(request: Request, exc: Exception) -> JSONResponse:
     logger.error(
@@ -133,7 +156,11 @@ async def health() -> dict[str, str]:
     "/api/hands",
     response_model=HandResponse,
     status_code=status.HTTP_201_CREATED,
-    responses={422: {"model": ErrorResponse}},
+    responses={
+        409: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
 )
 async def create_hand(
     payload: HandCreate,

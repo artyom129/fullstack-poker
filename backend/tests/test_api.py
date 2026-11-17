@@ -64,3 +64,27 @@ async def test_invalid_hand_returns_structured_422(
     response = await client.post("/api/hands", json=fold_payload)
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "invalid_hand"
+
+
+async def test_http_errors_use_the_documented_error_shape(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.get("/api/hands/00000000-0000-4000-8000-000000000099")
+    assert response.json() == {
+        "error": {"code": "not_found", "message": "hand not found"}
+    }
+
+
+async def test_duplicate_hand_returns_409_error(
+    client: httpx.AsyncClient,
+    fold_payload: dict,
+) -> None:
+    import asyncpg
+
+    async def duplicate(hand):
+        raise asyncpg.UniqueViolationError("duplicate key")
+
+    app.state.repository.create = duplicate
+    response = await client.post("/api/hands", json=fold_payload)
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "hand_exists"

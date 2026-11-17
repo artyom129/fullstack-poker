@@ -1,5 +1,1 @@
 @import "./poker-theme.css";
-
-.action-buttons {
-  grid-template-columns: repeat(3, minmax(62px, 1fr));
-}

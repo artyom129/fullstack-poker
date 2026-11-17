@@ -115,7 +115,7 @@ export function startHand(startingStack: number, options: StartOptions = {}): Ha
   postBlind(players[bigBlindSeat], BIG_BLIND, "big_blind", actions);
 
   return {
-    id: options.id ?? crypto.randomUUID(),
+    id: options.id ?? randomId(),
     startingStack,
     street: "preflop",
     players,
@@ -270,7 +270,6 @@ function applyAggressiveAction(
   if (
     target === undefined ||
     !Number.isInteger(target) ||
-    target % BIG_BLIND !== 0 ||
     target < bounds.minimum ||
     target > bounds.maximum
   ) {
@@ -476,6 +475,24 @@ function draw(deck: string[]): string {
   const card = deck.shift();
   if (!card) throw new Error("Deck is empty");
   return card;
+}
+
+/** RFC 4122 v4 id. `crypto.randomUUID` exists only in secure contexts, so the app
+ * crashed on Start when opened over plain HTTP on a LAN address. */
+export function randomId(): string {
+  if (typeof crypto.randomUUID === "function") {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      // fall through to the manual version
+    }
+  }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function randomSeat(): number {

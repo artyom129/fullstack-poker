@@ -62,18 +62,33 @@ def calculate_showdown(
     }
     awards: defaultdict[int, int] = defaultdict(int)
     pots: list[dict[str, object]] = []
+    # Pot boundaries come only from players still in the hand. A folded player's
+    # chips are dead money inside those pots; their commitment level must not
+    # open a separate "side pot" of its own.
     levels = sorted(
-        {player.committed_total for player in players if player.committed_total}
+        {
+            player.committed_total
+            for player in players
+            if not player.folded and player.committed_total
+        }
     )
+    if not levels:
+        raise HandValidationError("a pot has no eligible player")
+    if max(player.committed_total for player in players) > levels[-1]:
+        raise HandValidationError("a folded player cannot outbid every contender")
     previous = 0
 
     for index, level in enumerate(levels):
-        contributors = [player for player in players if player.committed_total >= level]
-        amount = (level - previous) * len(contributors)
+        amount = sum(
+            min(player.committed_total, level) - min(player.committed_total, previous)
+            for player in players
+        )
         previous = level
-        eligible = [player for player in contributors if not player.folded]
-        if not eligible:
-            raise HandValidationError("a pot has no eligible player")
+        eligible = [
+            player
+            for player in players
+            if not player.folded and player.committed_total >= level
+        ]
 
         best = max(hands[player.seat] for player in eligible)
         winners = [player for player in eligible if hands[player.seat] == best]
@@ -328,12 +343,7 @@ def _apply_aggressive_action(
     )
     maximum = player.committed_this_street + player.stack
     target = action.amount
-    if (
-        target is None
-        or target % BIG_BLIND != 0
-        or target < minimum
-        or target > maximum
-    ):
+    if target is None or target < minimum or target > maximum:
         raise HandValidationError(
             f"{action.type} amount must be between {minimum} and {maximum}"
         )
@@ -548,7 +558,9 @@ def _build_result(
     hand_details = [
         {
             "seat": seat,
-            "cards": [str(card) for card in hand.cards],
+            # str(card) is "ACE OF SPADES (As)"; store the same short notation as
+            # the rest of the snapshot.
+            "cards": [f"{card.rank.value}{card.suit.value}" for card in hand.cards],
             "category": hand.entry.label.value,
         }
         for seat, hand in sorted(hands.items())

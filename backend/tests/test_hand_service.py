@@ -52,6 +52,12 @@ def test_showdown_explains_hand_category(showdown_payload: dict) -> None:
     assert details[1] == "One pair"
 
 
+def test_showdown_best_five_uses_short_card_notation(showdown_payload: dict) -> None:
+    hand = validate_and_settle(parse(showdown_payload))
+    winner = next(item for item in hand.result["hands"] if item["seat"] == 0)
+    assert sorted(winner["cards"]) == sorted(["As", "5s", "2c", "3d", "4h"])
+
+
 def test_duplicate_cards_are_rejected(showdown_payload: dict) -> None:
     payload = deepcopy(showdown_payload)
     payload["players"][1]["holeCards"][0] = payload["players"][0]["holeCards"][0]
@@ -208,3 +214,96 @@ def test_action_after_completion_is_rejected(fold_payload: dict) -> None:
     payload["actions"].append({"type": "check", "seat": 2, "label": "Player 3 checks"})
     with pytest.raises(HandValidationError, match="after hand completion"):
         validate_and_settle(parse(payload))
+
+
+def _shove_payload(fold_payload: dict, stack: int) -> dict:
+    payload = deepcopy(fold_payload)
+    payload["startingStack"] = stack
+    commitments = {1: 20, 2: 40, 3: stack}
+    for player in payload["players"]:
+        seat = player["seat"]
+        player["startingStack"] = stack
+        player["committedTotal"] = commitments.get(seat, 0)
+        player["stack"] = stack - player["committedTotal"]
+        player["folded"] = seat != 3
+        player["allIn"] = seat == 3
+    payload["actions"] = payload["actions"][:2] + [
+        {
+            "type": "raise",
+            "seat": 3,
+            "amount": stack,
+            "label": f"Player 4 raises to {stack}",
+        },
+        *[
+            {"type": "fold", "seat": seat, "label": f"Player {seat + 1} folds"}
+            for seat in (4, 5, 0, 1, 2)
+        ],
+    ]
+    payload["shortActionSequence"] = f"r{stack} f f f f f"
+    return payload
+
+
+def test_raise_for_whole_stack_off_the_40_grid_is_accepted(fold_payload: dict) -> None:
+    hand = validate_and_settle(parse(_shove_payload(fold_payload, 1_010)))
+    assert hand.winnings["3"] == 60
+    assert hand.winnings["1"] == -20
+    assert hand.winnings["2"] == -40
+
+
+def test_raise_above_the_stack_is_still_rejected(fold_payload: dict) -> None:
+    payload = _shove_payload(fold_payload, 1_010)
+    payload["actions"][2]["amount"] = 1_050
+    payload["shortActionSequence"] = "r1050 f f f f f"
+    with pytest.raises(HandValidationError, match="between"):
+        validate_and_settle(parse(payload))
+
+
+def test_folded_blind_does_not_create_a_phantom_side_pot(
+    showdown_payload: dict,
+) -> None:
+    payload = deepcopy(showdown_payload)
+    # Seat 1 posts the small blind and folds; everyone else shoves for 300.
+    payload["players"][1].update(
+        {"stack": 280, "committedTotal": 20, "folded": True, "allIn": False}
+    )
+    actions = payload["actions"]
+    seat1_shove = next(
+        index
+        for index, action in enumerate(actions)
+        if action["type"] == "allin" and action["seat"] == 1
+    )
+    actions[seat1_shove] = {
+        "type": "fold",
+        "seat": 1,
+        "label": "Player 2 folds",
+    }
+    payload["shortActionSequence"] = "allin allin allin allin f allin 2c3d4h 8s 9c"
+
+    hand = validate_and_settle(parse(payload))
+
+    assert hand.result["pots"] == [
+        {
+            "name": "Main pot",
+            "amount": 1_520,
+            "eligibleSeats": [0, 2, 3, 4, 5],
+            "winnerSeats": [0],
+        }
+    ]
+    assert hand.winnings["0"] == 1_220
+    assert hand.winnings["1"] == -20
+
+
+def test_real_side_pot_is_still_split_by_all_in_levels(
+    showdown_payload: dict,
+) -> None:
+    from app.hand_service import calculate_showdown
+
+    payload = parse(showdown_payload)
+    players = payload.players
+    # Seat 0 (the straight) is all-in short for 100; the rest put in 300.
+    players[0].committed_total = 100
+    players[0].stack = 200
+    _, result = calculate_showdown(players, payload.board, payload.dealer_seat)
+    assert [pot["amount"] for pot in result["pots"]] == [600, 1_000]
+    assert result["pots"][0]["winnerSeats"] == [0]
+    assert result["pots"][1]["eligibleSeats"] == [1, 2, 3, 4, 5]

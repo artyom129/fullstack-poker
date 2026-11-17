@@ -26,17 +26,18 @@ const config: Config = {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
         },
+        brass: {
+          DEFAULT: "hsl(var(--brass))",
+          foreground: "hsl(var(--brass-foreground))",
+        },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
       },
       fontFamily: {
-        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
-        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
-      },
-      boxShadow: {
-        glow: "0 0 0 1px rgba(72, 214, 151, .2), 0 16px 60px rgba(0, 0, 0, .35)",
+        sans: ["Geist Variable", "system-ui", "sans-serif"],
+        mono: ["Geist Mono Variable", "ui-monospace", "monospace"],
       },
     },
   },

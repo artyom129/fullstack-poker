@@ -7,6 +7,7 @@ import {
   BIG_BLIND,
   createDeck,
   handPayload,
+  randomId,
   shortActionSequence,
   SMALL_BLIND,
   startHand,
@@ -207,5 +208,26 @@ describe("poker engine", () => {
     expect(deck).toHaveLength(52);
     expect(new Set(deck).size).toBe(52);
   });
-});
 
+  it("allows raising the whole stack when it is off the 40-chip grid", () => {
+    const state = newHand(1010);
+    const bounds = amountBounds(state);
+    expect(bounds.maximum).toBe(1010);
+    const raised = applyAction(state, "raise", adjustAmount(980, 1, bounds));
+    expect(raised.currentBet).toBe(1010);
+    expect(raised.players[3].allIn).toBe(true);
+    expect(raised.actions.at(-1)?.type).toBe("raise");
+  });
+
+  it("creates v4 ids without crypto.randomUUID (plain HTTP on a LAN address)", () => {
+    const original = crypto.randomUUID;
+    Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true });
+    try {
+      const id = randomId();
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      expect(startHand(1000).id).not.toBe(id);
+    } finally {
+      Object.defineProperty(crypto, "randomUUID", { value: original, configurable: true });
+    }
+  });
+});
